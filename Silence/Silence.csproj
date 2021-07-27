@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\CoreAudio\CoreAudio\CoreAudio.csproj" />
+    <EmbeddedResource Include="res\**" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net5.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>res\mic_on.ico</ApplicationIcon>
+  </PropertyGroup>
+
+
+</Project>
