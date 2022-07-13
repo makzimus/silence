@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Collections.Generic;
 using System.Media;
 using CoreAudio;
+using SteelSeries.GameSense;
 
 namespace Silence
 {
@@ -17,7 +18,7 @@ namespace Silence
         private bool _muted;
         private readonly List<System.Drawing.Icon> _icons = new();
         private readonly List<SoundPlayer> _audio = new();
-        private KeyboardHook _keyboardHook = new();
+        private readonly KeyboardHook _keyboardHook = new();
 
         private static Stream GetEmbeddedResource(string resourceName)
         {
@@ -54,6 +55,12 @@ namespace Silence
             var exitItem = _contextMenu.Items.Add("E&xit");
             exitItem.Click += OnExitPressed;
 
+            var gsClient = GSClient.Instance;
+            gsClient.Initialize();
+            gsClient.RegisterGame("SILENCE", "Silence", "Makzimus");
+            gsClient.RegisterEvent("MUTE_0", 0, 100, EventIconId.Default, true);
+            gsClient.RegisterEvent("MUTE_1", 0, 100, EventIconId.Default, true);
+
             LoadResources();
             _icon = new NotifyIcon(_components)
             {
@@ -85,6 +92,9 @@ namespace Silence
             {
                 _audio[mute ? 0 : 1].Play();
             }
+
+            GSClient.Instance.SendEvent("MUTE_0", mute ? 0 : 100);
+            GSClient.Instance.SendEvent("MUTE_1", mute ? 0 : 100);
         }
 
         private void OnIconClicked(object Sender, MouseEventArgs e)
@@ -103,6 +113,7 @@ namespace Silence
         private void OnExitPressed(object Sender, EventArgs e)
         {
             _icon.Visible = false;
+            GSClient.Instance.Terminate();
             Application.Exit();
         }
 

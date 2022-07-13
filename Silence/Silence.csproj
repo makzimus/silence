@@ -5,6 +5,10 @@
     <EmbeddedResource Include="res\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\GameSense\GameSense.csproj" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net5.0-windows</TargetFramework>

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <DefineConstants>NO_UNITY</DefineConstants>
+  </PropertyGroup>
+</Project>
