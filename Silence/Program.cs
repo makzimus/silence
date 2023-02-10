@@ -122,7 +122,7 @@ namespace Silence
                 return;
             }
 
-            var profile = _muted ? "Muted" : "Default";
+            var profile = _muted ? _settings.OpenRGBMutedProfile : _settings.OpenRGBDefaultProfile;
             _openRGB.LoadProfile(profile);
         }
 

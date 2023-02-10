@@ -32,5 +32,33 @@ namespace Silence
                 this[nameof(Hotkey)] = value;
             }
         }
+
+        [UserScopedSetting]
+        [DefaultSettingValue("Muted")]
+        public string OpenRGBMutedProfile
+        {
+            get
+            {
+                return (string)this[nameof(OpenRGBMutedProfile)];
+            }
+            set
+            {
+                this[nameof(OpenRGBMutedProfile)] = value;
+            }
+        }
+
+        [UserScopedSetting]
+        [DefaultSettingValue("Default")]
+        public string OpenRGBDefaultProfile
+        {
+            get
+            {
+                return (string)this[nameof(OpenRGBDefaultProfile)];
+            }
+            set
+            {
+                this[nameof(OpenRGBDefaultProfile)] = value;
+            }
+        }
     }
 }
