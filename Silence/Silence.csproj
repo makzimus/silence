@@ -6,7 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\GameSense\GameSense.csproj" />
+    <ProjectReference Include="..\OpenRGB\OpenRGB.NET\OpenRGB.NET.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

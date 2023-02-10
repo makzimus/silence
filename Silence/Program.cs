@@ -6,7 +6,7 @@ using System.ComponentModel;
 using System.Collections.Generic;
 using System.Media;
 using CoreAudio;
-using SteelSeries.GameSense;
+using OpenRGB.NET;
 
 namespace Silence
 {
@@ -19,6 +19,8 @@ namespace Silence
         private readonly List<System.Drawing.Icon> _icons = new();
         private readonly List<SoundPlayer> _audio = new();
         private readonly KeyboardHook _keyboardHook = new();
+        private readonly Settings _settings = new();
+        private OpenRGBClient _openRGB;
 
         private static Stream GetEmbeddedResource(string resourceName)
         {
@@ -52,14 +54,15 @@ namespace Silence
         {
             _components = new Container();
             _contextMenu = new ContextMenuStrip(_components);
+
+            TryConnectOpenRGB();
+
+            var muteItem = (ToolStripMenuItem)_contextMenu.Items.Add("&Mute");
+            muteItem.Checked = !_settings.PlayAudio;
+            muteItem.Click += OnMutePressed;
+
             var exitItem = _contextMenu.Items.Add("E&xit");
             exitItem.Click += OnExitPressed;
-
-            var gsClient = GSClient.Instance;
-            gsClient.Initialize();
-            gsClient.RegisterGame("SILENCE", "Silence", "Makzimus");
-            gsClient.RegisterEvent("MUTE_0", 0, 100, EventIconId.Default, true);
-            gsClient.RegisterEvent("MUTE_1", 0, 100, EventIconId.Default, true);
 
             LoadResources();
             _icon = new NotifyIcon(_components)
@@ -72,7 +75,8 @@ namespace Silence
             _icon.ContextMenuStrip = _contextMenu;
 
             _keyboardHook.KeyPressed += OnHotkeyPressed;
-            _keyboardHook.RegisterHotKey(ModifierKeys.Control | ModifierKeys.Alt, Keys.N);
+            var hotkey = HotkeyParser.Parse(_settings.Hotkey);
+            _keyboardHook.RegisterHotKey(hotkey.Item1, hotkey.Item2);
 
             MuteDevices(_muted, false);
         }
@@ -88,13 +92,38 @@ namespace Silence
             }
 
             _icon.Icon = _icons[mute ? 0 : 1];
-            if (playAudio)
+            if (playAudio && _settings.PlayAudio)
             {
                 _audio[mute ? 0 : 1].Play();
             }
 
-            GSClient.Instance.SendEvent("MUTE_0", mute ? 0 : 100);
-            GSClient.Instance.SendEvent("MUTE_1", mute ? 0 : 100);
+            ToggleRGB();
+        }
+
+        private void TryConnectOpenRGB()
+        {
+            if (_openRGB == null)
+            {
+                try
+                {
+                    _openRGB = new OpenRGBClient(name: "Silence", autoconnect: true, timeout: 1000);
+                }
+                catch (TimeoutException)
+                {
+                    // failed to connect
+                }
+            }
+        }
+
+        private void ToggleRGB()
+        {
+            if (_openRGB == null)
+            {
+                return;
+            }
+
+            var profile = _muted ? "Muted" : "Default";
+            _openRGB.LoadProfile(profile);
         }
 
         private void OnIconClicked(object Sender, MouseEventArgs e)
@@ -110,11 +139,18 @@ namespace Silence
             MuteDevices(!_muted);
         }
 
-        private void OnExitPressed(object Sender, EventArgs e)
+        private void OnExitPressed(object sender, EventArgs e)
         {
             _icon.Visible = false;
-            GSClient.Instance.Terminate();
             Application.Exit();
+        }
+
+        private void OnMutePressed(object sender, EventArgs e)
+        {
+            var menuItem = (ToolStripMenuItem)sender;
+            menuItem.Checked = _settings.PlayAudio;
+            _settings.PlayAudio = !_settings.PlayAudio;
+            _settings.Save();
         }
 
         [STAThread]
