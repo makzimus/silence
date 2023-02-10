@@ -61,6 +61,10 @@ namespace Silence
             muteItem.Checked = !_settings.PlayAudio;
             muteItem.Click += OnMutePressed;
 
+            var connectItem = _contextMenu.Items.Add("Connect");
+            connectItem.ToolTipText = "Connect to OpenRGB";
+            connectItem.Click += (object sender, EventArgs e) => TryConnectOpenRGB();
+
             var exitItem = _contextMenu.Items.Add("E&xit");
             exitItem.Click += OnExitPressed;
 
@@ -123,7 +127,16 @@ namespace Silence
             }
 
             var profile = _muted ? _settings.OpenRGBMutedProfile : _settings.OpenRGBDefaultProfile;
-            _openRGB.LoadProfile(profile);
+
+            try
+            {
+                _openRGB.LoadProfile(profile);
+            }
+            catch (Exception)
+            {
+                _openRGB.Dispose();
+                _openRGB = null;
+            }
         }
 
         private void OnIconClicked(object Sender, MouseEventArgs e)
