@@ -21,8 +21,12 @@ namespace Silence
         private readonly KeyboardHook _keyboardHook = new();
         private readonly Settings _settings = new();
         private OpenRGBClient _openRGB;
+        private ToolStripMenuItem _connectItem;
+        private ToolStripMenuItem _mutedProfilesItem;
+        private ToolStripMenuItem _defaultProfilesItem;
+        private readonly Timer _openRGBTimer = new() { Interval = 1000 };
 
-        private static Stream GetEmbeddedResource(string resourceName)
+    private static Stream GetEmbeddedResource(string resourceName)
         {
             var assembly = Assembly.GetExecutingAssembly();
             return assembly.GetManifestResourceStream(resourceName);
@@ -55,18 +59,23 @@ namespace Silence
             _components = new Container();
             _contextMenu = new ContextMenuStrip(_components);
 
-            TryConnectOpenRGB();
+            var openRGBItem = _contextMenu.Items.Add("OpenRGB") as ToolStripMenuItem;
+            _connectItem = openRGBItem.DropDownItems.Add("Connect") as ToolStripMenuItem;
+            _connectItem.ToolTipText = "Connect";
+            _connectItem.Click += OnConnectPressed;
 
             var muteItem = (ToolStripMenuItem)_contextMenu.Items.Add("&Mute");
             muteItem.Checked = !_settings.PlayAudio;
             muteItem.Click += OnMutePressed;
 
-            var connectItem = _contextMenu.Items.Add("Connect");
-            connectItem.ToolTipText = "Connect to OpenRGB";
-            connectItem.Click += (object sender, EventArgs e) => TryConnectOpenRGB();
+            _defaultProfilesItem = openRGBItem.DropDownItems.Add("Default Profile") as ToolStripMenuItem;
+            _mutedProfilesItem = openRGBItem.DropDownItems.Add("Muted Profile") as ToolStripMenuItem;
 
             var exitItem = _contextMenu.Items.Add("E&xit");
             exitItem.Click += OnExitPressed;
+
+            _openRGBTimer.Tick += CheckOpenRGBConnection;
+            TryConnectOpenRGB();
 
             LoadResources();
             _icon = new NotifyIcon(_components)
@@ -111,12 +120,108 @@ namespace Silence
                 try
                 {
                     _openRGB = new OpenRGBClient(name: "Silence", autoconnect: true, timeout: 1000);
+                    Console.WriteLine("OpenRGB connected.");
+                    _connectItem.Checked = _openRGB.Connected;
+                    _openRGBTimer.Start();
+                    UpdateOpenRGBProfiles();
                 }
                 catch (TimeoutException)
                 {
-                    // failed to connect
+                    Console.WriteLine("OpenRGB failed to connect.");
                 }
             }
+        }
+
+        private void CheckOpenRGBConnection(object sender, EventArgs e)
+        {
+            if (_openRGB != null)
+            {
+                try
+                {
+                    _openRGB.GetControllerCount();
+                }
+                catch (Exception)
+                {
+                    // Swallow any exceptions.
+                }
+
+                if (!_openRGB.Connected)
+                {
+                    OnOpenRGBDisconnected();
+                }
+            }
+        }
+
+        private void OnOpenRGBDisconnected()
+        {
+            Console.WriteLine("OpenRGB disconnected.");
+            _openRGB?.Dispose();
+            _openRGB = null;
+            _connectItem.Checked = false;
+            _openRGBTimer.Stop();
+        }
+
+        private void UpdateOpenRGBProfiles()
+        {
+            // Clear current items
+            _mutedProfilesItem.DropDownItems.Clear();
+            _defaultProfilesItem.DropDownItems.Clear();
+
+            var profiles = _openRGB.GetProfiles();
+            foreach (var profile in profiles)
+            {
+                var mutedItem = _mutedProfilesItem.DropDownItems.Add(profile);
+                mutedItem.Name = profile;
+                mutedItem.Click += OnProfileChanged;
+
+                var defaultItem = _defaultProfilesItem.DropDownItems.Add(profile);
+                defaultItem.Name = profile;
+                defaultItem.Click += OnProfileChanged;
+            }
+
+            CheckDropDownMenuItem(_mutedProfilesItem, _settings.OpenRGBMutedProfile);
+            CheckDropDownMenuItem(_defaultProfilesItem, _settings.OpenRGBDefaultProfile);
+        }
+
+        private static void CheckDropDownMenuItem(ToolStripMenuItem parent, string itemName)
+        {
+            if (parent.DropDownItems.ContainsKey(itemName))
+            {
+                var item = parent.DropDownItems[itemName] as ToolStripMenuItem;
+                item.Checked = true;
+            }
+        }
+
+        private void OnProfileChanged(object sender, EventArgs e)
+        {
+            var menuItem = sender as ToolStripMenuItem;
+            var ownerItem = menuItem.OwnerItem as ToolStripMenuItem;
+
+            if (ownerItem == _mutedProfilesItem)
+            {
+                _settings.OpenRGBMutedProfile = menuItem.Name;
+                if (_muted)
+                {
+                    SelectProfile(menuItem.Name);
+                }
+            }
+            else
+            {
+                _settings.OpenRGBDefaultProfile = menuItem.Name;
+                if (!_muted)
+                {
+                    SelectProfile(menuItem.Name);
+                }
+            }
+
+            _settings.Save();
+
+            foreach (ToolStripMenuItem item in ownerItem.DropDownItems)
+            {
+                item.Checked = false;
+            }
+
+            menuItem.Checked = true;
         }
 
         private void ToggleRGB()
@@ -127,7 +232,11 @@ namespace Silence
             }
 
             var profile = _muted ? _settings.OpenRGBMutedProfile : _settings.OpenRGBDefaultProfile;
+            SelectProfile(profile);
+        }
 
+        private void SelectProfile(string profile)
+        {
             try
             {
                 _openRGB.LoadProfile(profile);
@@ -139,7 +248,7 @@ namespace Silence
             }
         }
 
-        private void OnIconClicked(object Sender, MouseEventArgs e)
+        private void OnIconClicked(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
             {
@@ -160,10 +269,22 @@ namespace Silence
 
         private void OnMutePressed(object sender, EventArgs e)
         {
-            var menuItem = (ToolStripMenuItem)sender;
+            var menuItem = sender as ToolStripMenuItem;
             menuItem.Checked = _settings.PlayAudio;
             _settings.PlayAudio = !_settings.PlayAudio;
             _settings.Save();
+        }
+
+        private void OnConnectPressed(object sender, EventArgs e)
+        {
+            if (_openRGB?.Connected == true)
+            {
+                OnOpenRGBDisconnected();
+            }
+            else
+            {
+                TryConnectOpenRGB();
+            }
         }
 
         [STAThread]
