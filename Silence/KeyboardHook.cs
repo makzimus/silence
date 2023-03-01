@@ -18,7 +18,7 @@ namespace Silence
         /// </summary>
         private class Window : NativeWindow, IDisposable
         {
-            private static int WM_HOTKEY = 0x0312;
+            private static readonly int WM_HOTKEY = 0x0312;
 
             public Window()
             {
@@ -85,6 +85,17 @@ namespace Silence
                 throw new InvalidOperationException("Couldn’t register the hot key.");
         }
 
+        public void ClearRegisteredHotkeys()
+        {
+            // unregister all the registered hot keys.
+            for (int i = _currentId; i > 0; i--)
+            {
+                UnregisterHotKey(_window.Handle, i);
+            }
+
+            _currentId = 0;
+        }
+
         /// <summary>
         /// A hot key has been pressed.
         /// </summary>
@@ -95,10 +106,7 @@ namespace Silence
         public void Dispose()
         {
             // unregister all the registered hot keys.
-            for (int i = _currentId; i > 0; i--)
-            {
-                UnregisterHotKey(_window.Handle, i);
-            }
+            ClearRegisteredHotkeys();
 
             // dispose the inner native window.
             _window.Dispose();

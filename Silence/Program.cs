@@ -1,12 +1,16 @@
+using CoreAudio;
+using Microsoft.Win32;
+using OpenRGB.NET;
+using OpenRGB.NET.Models;
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Media;
 using System.Reflection;
 using System.Windows.Forms;
-using System.ComponentModel;
-using System.Collections.Generic;
-using System.Media;
-using CoreAudio;
-using OpenRGB.NET;
 
 namespace Silence
 {
@@ -26,7 +30,9 @@ namespace Silence
         private ToolStripMenuItem _defaultProfilesItem;
         private readonly Timer _openRGBTimer = new() { Interval = 1000 };
 
-    private static Stream GetEmbeddedResource(string resourceName)
+        public bool OpenRGBConnected => _openRGB != null && _openRGB.Connected;
+
+        private static Stream GetEmbeddedResource(string resourceName)
         {
             var assembly = Assembly.GetExecutingAssembly();
             return assembly.GetManifestResourceStream(resourceName);
@@ -56,6 +62,8 @@ namespace Silence
 
         private void Initialize()
         {
+            SystemEvents.SessionSwitch += OnSystemSessionSwitch;
+
             _components = new Container();
             _contextMenu = new ContextMenuStrip(_components);
 
@@ -64,12 +72,21 @@ namespace Silence
             _connectItem.ToolTipText = "Connect";
             _connectItem.Click += OnConnectPressed;
 
+            var hotkeyItem = (ToolStripMenuItem)_contextMenu.Items.Add("Set Hotkey");
+            hotkeyItem.Click += OnHotkeyItemPressed;
+
             var muteItem = (ToolStripMenuItem)_contextMenu.Items.Add("&Mute");
             muteItem.Checked = !_settings.PlayAudio;
             muteItem.Click += OnMutePressed;
 
             _defaultProfilesItem = openRGBItem.DropDownItems.Add("Default Profile") as ToolStripMenuItem;
             _mutedProfilesItem = openRGBItem.DropDownItems.Add("Muted Profile") as ToolStripMenuItem;
+
+            var gitItem = _contextMenu.Items.Add("Open Github");
+            gitItem.Click += (s, e) => {
+                const string url = "https://github.com/makzimus/silence";
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            };
 
             var exitItem = _contextMenu.Items.Add("E&xit");
             exitItem.Click += OnExitPressed;
@@ -88,13 +105,19 @@ namespace Silence
             _icon.ContextMenuStrip = _contextMenu;
 
             _keyboardHook.KeyPressed += OnHotkeyPressed;
-            var hotkey = HotkeyParser.Parse(_settings.Hotkey);
-            _keyboardHook.RegisterHotKey(hotkey.Item1, hotkey.Item2);
+            RegisterHotkey();
 
             MuteDevices(_muted, false);
         }
 
-        private void MuteDevices(bool mute, bool playAudio = true)
+        private void RegisterHotkey()
+        {
+            var hotkey = HotkeyParser.Parse(_settings.Hotkey);
+            _keyboardHook.ClearRegisteredHotkeys();
+            _keyboardHook.RegisterHotKey(hotkey.Item1, hotkey.Item2);
+        }
+
+        private void MuteDevices(bool mute, bool playAudio = true, bool updateRGB = true)
         {
             _muted = mute;
             var deviceEnumerator = new MMDeviceEnumerator();
@@ -110,7 +133,10 @@ namespace Silence
                 _audio[mute ? 0 : 1].Play();
             }
 
-            ToggleRGB();
+            if (updateRGB)
+            {
+                UpdateOpenRGBProfile();
+            }
         }
 
         private void TryConnectOpenRGB()
@@ -224,9 +250,12 @@ namespace Silence
             menuItem.Checked = true;
         }
 
-        private void ToggleRGB()
+        /// <summary>
+        /// Selects the OpenRGB profile according to the current mute state.
+        /// </summary>
+        private void UpdateOpenRGBProfile()
         {
-            if (_openRGB == null)
+            if (!OpenRGBConnected)
             {
                 return;
             }
@@ -235,6 +264,10 @@ namespace Silence
             SelectProfile(profile);
         }
 
+        /// <summary>
+        /// Select an OpenRGB profile.
+        /// </summary>
+        /// <param name="profile">The profile to select.</param>
         private void SelectProfile(string profile)
         {
             try
@@ -243,8 +276,7 @@ namespace Silence
             }
             catch (Exception)
             {
-                _openRGB.Dispose();
-                _openRGB = null;
+                OnOpenRGBDisconnected();
             }
         }
 
@@ -275,6 +307,18 @@ namespace Silence
             _settings.Save();
         }
 
+        private void OnHotkeyItemPressed(object sender, EventArgs e)
+        {
+            KeyCaptureForm keyCaptureForm = new(_settings.Hotkey);
+            if (keyCaptureForm.ShowDialog() == DialogResult.OK)
+            {
+                string keyCombination = keyCaptureForm.KeyLabel.Text;
+                _settings.Hotkey = keyCombination;
+                _settings.Save();
+                RegisterHotkey();
+            }
+        }
+
         private void OnConnectPressed(object sender, EventArgs e)
         {
             if (_openRGB?.Connected == true)
@@ -284,6 +328,29 @@ namespace Silence
             else
             {
                 TryConnectOpenRGB();
+            }
+        }
+
+        private void OnSystemSessionSwitch(object sender, SessionSwitchEventArgs e)
+        {
+            if (e.Reason == SessionSwitchReason.SessionLock)
+            {
+                MuteDevices(true, playAudio: false, updateRGB: false);
+
+                if (OpenRGBConnected)
+                {
+                    int controllerCount = _openRGB.GetControllerCount();
+                    for (int i = 0; i < controllerCount; ++i)
+                    {
+                        var controllerData = _openRGB.GetControllerData(i);
+                        var offArray = Enumerable.Repeat(new Color(), controllerData.Colors.Length).ToArray();
+                        _openRGB.UpdateLeds(i, offArray);
+                    }
+                }
+            }
+            else if (e.Reason == SessionSwitchReason.SessionUnlock)
+            {
+                UpdateOpenRGBProfile();
             }
         }
 
